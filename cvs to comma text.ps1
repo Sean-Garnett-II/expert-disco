@@ -16,5 +16,5 @@ if(Test-Path -Path $fileName){
   echo "Bad file Name"
   pause
 }
-
+Start-Process -FilePath "$fileName.txt"
 pause
