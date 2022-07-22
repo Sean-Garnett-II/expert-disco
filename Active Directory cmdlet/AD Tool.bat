@@ -3,14 +3,17 @@ REM Author Sean Garnett II
 
 REM TODO Add EIN Search capabilities
 
-setlocal
+setlocal enabledelayedexpansion
 color 0A
+
+if not exist ADToolTemp.txt (
+	echo >ADToolTemp.txt
+)
 
 for /f "usebackq tokens=1,2 delims=,=- " %%i in (`wmic os get LocalDateTime /value`) do @if %%i==LocalDateTime (
      set fulldate=%%j
 )
 
-set "password="
 set password=Password%fulldate:~4,4%
 
 :nextUserName
@@ -34,12 +37,63 @@ if "%userName%" == "s" (goto search)
 if "%userName%" == "search" (goto search)
 
 :refresh
-powershell "Get-ADUser %userName% -Properties * | select DisplayName, Title, Description, EmployeeID, Enabled, LockedOut, LastBadPasswordAttempt, badPwdCount, LastLogonDate, PasswordExpired, PasswordLastSet, AccountExpirationDate, entrustIGLastAuthDate, entrustIGLastFailedAuthDate, entrustIGTokenLoadDate"
+powershell "Get-ADUser %userName% -Properties * | select DisplayName, Title, Description, EmployeeID, Enabled, LockedOut, LastBadPasswordAttempt, badPwdCount, LastLogonDate, PasswordExpired, PasswordLastSet, AccountExpirationDate, entrustIGLastAuthDate, entrustIGLastFailedAuthDate, entrustIGTokenLoadDate" >ADToolTemp.txt
 if %ERRORLEVEL% NEQ 0 (
 echo An Error Occurred, Error Level: %ERRORLEVEL%
 echo:
 goto search
 )
+
+SET count=1
+FOR /F "tokens=* delims=^ skip=2" %%F IN (ADToolTemp.txt) DO (
+	SET var!count!=%%F
+	SET /a count=!count!+1
+)
+
+Echo:
+Echo:
+ECHO:%var1%
+ECHO:%var2%
+ECHO:%var3%
+ECHO:%var4%
+Echo:
+
+findstr /I /R "\<Enabled.*False\>" ADToolTemp.txt >nul
+IF %errorlevel% equ 0 (
+	Echo Account Status: Disabled
+	ECHO %var12%
+)
+
+findstr /I /R "\<LockedOut.*True\>" ADToolTemp.txt >nul
+IF %errorlevel% equ 0 (
+	Echo Account Status: Locked
+	Echo:%var7%
+	Echo:%var9%
+)
+
+findstr /I /R "\<badPwdCount.*0\>" ADToolTemp.txt >nul
+IF %errorlevel% neq 0 (
+	Echo:%var8%
+
+)
+
+findstr /I /R "\<PasswordExpired.*True\>" ADToolTemp.txt >nul
+IF %errorlevel% equ 0 (
+	Echo Password Status: Expired 
+)
+
+findstr /I /R "\<entrustIGTokenLoadDate.*{}\>" ADToolTemp.txt >nul
+IF %errorlevel% equ 0 (
+	ECHO:
+	Echo The user does not have an Entrust Account
+) Else (
+	ECHO:
+	ECHO %var13%
+	ECHO %var14%
+	ECHO %var15%
+)
+	ECHO:
+	ECHO:
 
 :options
 set "option="
@@ -47,6 +101,7 @@ echo Options: search, unlock, reset, next, refresh, manager, exit
 set /p option=">"
 if "%option%" == "" (goto options)
 if "%option%" == "n" (goto nextUserName)
+if "%option%" == "N" (goto nextUserName)
 if "%option%" == "next" (goto nextUserName)
 if "%option%" == "nxt" (goto nextUserName)
 if "%option%" == "exit" (goto end)
@@ -62,10 +117,14 @@ if "%option%" == "manager" (goto manager)
 if "%option%" == "mng" (goto manager)
 if "%option%" == "s" (goto search)
 if "%option%" == "search" (goto search)
+if "%option%" == "all" (goto showAll)
 if "%option%" == "clear" (
 cls
 goto options)
-echo "%option%" is an invalid option
+if "%option%" == "cls" (
+cls
+goto options)
+echo:"%option%" is an invalid option
 echo:
 goto :options
 
@@ -73,7 +132,7 @@ goto :options
 powershell "Unlock-ADAccount -Identity %userName%"
 echo The account has been unlocked
 
-if "%option%" == "unlock" (goto nextUserName)
+if "%option%" == "unlock" (goto refresh)
 
 :reset
 set "confirm="
@@ -124,6 +183,13 @@ goto nextUserName
 :clear
 cls
 
+:showAll
+echo:
+FOR /F "tokens=* delims=^ skip=2" %%F IN (ADToolTemp.txt) DO (
+echo:%%F
+)
+echo:
+goto options
 
 :end
 endlocal
